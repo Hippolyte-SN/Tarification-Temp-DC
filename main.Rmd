@@ -1,0 +1,235 @@
+---
+title: "Tarification Assurance Décès Temporaire"
+author: "SANON Korossin"
+date: "22/06/2026"
+output: 
+  html_document: 
+    number_sections: yes
+  pdf_document: 
+    number_sections: yes
+  html_notebook: 
+    number_sections: yes
+editor_options: 
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r Fixer le répertoire de travail au dossier. NB: Si vous utilisez Rprojet pas besoins de lancer ce chunk, eval=FALSE, include=FALSE}
+args <- commandArgs(trailingOnly = FALSE)
+script_path <- sub("--file=", "", args[grep("--file=", args)])
+if (length(script_path) > 0) {
+  setwd(dirname(normalizePath(script_path)))
+}
+```
+
+
+```{r message=FALSE, warning=FALSE}
+source("src/tables_mortalite.R")
+source("src/fonctions_commutation.R")
+source("src/tarification.R")
+source("src/provisions.R")
+source("src/rapport.R")
+source("data/generate_tables.R")
+source("data/generate_portfolio.R")
+```
+
+## TARIFICATION ASSURANCE DECES TEMPORAIRE
+
+### Generation des tables de mortalite
+```{r}
+generate_tables(output_dir = "data")
+```
+
+```{r}
+th <- read.csv("data/table_TH0002.csv")
+cat(sprintf("  TH : q(40)=%.5f  q(60)=%.5f\n", th$qx[41], th$qx[61]))
+```
+
+```{r}
+tf <- read.csv("data/table_TF0002.csv")
+cat(sprintf("  TF : q(40)=%.5f  q(60)=%.5f\n", tf$qx[41], tf$qx[61]))
+```
+
+
+### Generation du portefeuille simule
+```{r}
+df_port <- generate_portfolio(output_dir = "data")
+```
+
+
+### Calcul des barèmes de primes
+
+> Bareme Hommes non-fumeurs (taux pour mille) :
+
+```{r}
+barem_H     <- bareme(genre = "H", fumeur = FALSE, hyp = HYP_BASE)
+print(barem_H)
+```
+
+> Bareme Femmes non-fumeurs (taux pour mille) :
+
+```{r}
+barem_F     <- bareme(genre = "F", fumeur = FALSE, hyp = HYP_BASE)
+print(barem_F)
+```
+
+> Surcout fumeur (‰) :
+
+```{r}
+barem_H_fum <- bareme(genre = "H", fumeur = TRUE,  hyp = HYP_BASE)
+print(round(barem_H_fum - barem_H, 3))
+```
+
+
+### Exemple de tarification detaillee
+
+> Assure : H, 40 ans, 20 ans, 150 000 EUR
+
+```{r}
+ex_tarif <- prime_commerciale(40, 20, 150000, "H", FALSE, HYP_BASE)
+```
+
+```{r}
+cat(sprintf("  Prime nette         : %10.2f EUR\n", ex_tarif$prime_nette_annuelle))
+```
+
+```{r}
+cat(sprintf("  Prime commerciale   : %10.2f EUR\n", ex_tarif$prime_commerciale))
+```
+
+```{r}
+cat(sprintf("    Frais acq.        : %10.2f EUR\n", ex_tarif$dont_frais_acquisition))
+```
+
+```{r}
+cat(sprintf("    Frais gestion     : %10.2f EUR\n", ex_tarif$dont_frais_gestion))
+```
+
+```{r}
+cat(sprintf("    Frais capital     : %10.2f EUR\n", ex_tarif$dont_frais_capital))
+```
+
+```{r}
+cat(sprintf("    Frais fixes       : %10.2f EUR\n", ex_tarif$dont_frais_fixes))
+```
+
+```{r}
+cat(sprintf("    Marge technique   : %10.2f EUR\n", ex_tarif$marge_technique))
+```
+
+```{r}
+cat(sprintf("  Taux de chargement  : %10.2f %%\n",  ex_tarif$taux_chargement))
+```
+
+
+### Provisions mathematiques
+
+> Profil provisions (H, 40 ans, 20 ans, 150 000 EUR) :
+
+```{r}
+P_nette_unit <- ex_tarif$prime_nette_annuelle / 150000
+df_prov_ex <- profil_provisions(40, 20, P_nette_unit, C = 150000, genre = "H", taux = 0.02)
+print(df_prov_ex, row.names = FALSE)
+```
+
+> Bilan portefeuille :
+
+```{r}
+df_prov <- provisions_portefeuille(df_port, hyp = HYP_BASE)
+bilan   <- bilan_provisions(df_prov)
+```
+
+```{r}
+cat(sprintf("  Contrats            : %d\n",          bilan$nb_contrats))
+```
+
+```{r}
+cat(sprintf("  Capital total       : %.0f EUR\n",     bilan$capital_total))
+```
+
+```{r}
+cat(sprintf("  Primes annuelles    : %.2f EUR\n",     bilan$primes_annuelles_totales))
+```
+
+```{r}
+cat(sprintf("  Provisions totales  : %.2f EUR\n",     bilan$provisions_totales))
+```
+
+```{r}
+cat(sprintf("  Provision / Capital : %.4f %%\n",      bilan$provision_par_euro_cap * 100))
+```
+
+
+### Graphiques et exports
+```{r}
+sensi_taux <- do.call(rbind, lapply(c(0.00, 0.01, 0.02, 0.03, 0.04), function(tx) {
+  do.call(rbind, lapply(c(10, 20, 30), function(n) {
+    if (40 + n > 75) return(NULL)
+    r <- prime_commerciale(40, n, 100000, "H", FALSE,
+                            nouvelles_hypotheses(taux_technique = tx, marge_mortalite = 0.10))
+    data.frame(taux = tx, duree = n, prime_commerciale = r$prime_commerciale)
+  }))
+}))
+```
+
+```{r}
+sensi_mort <- do.call(rbind, lapply(c(0.00, 0.05, 0.10, 0.15, 0.20, 0.25), function(mg) {
+  do.call(rbind, lapply(c(10, 20, 30), function(n) {
+    if (40 + n > 75) return(NULL)
+    r <- prime_commerciale(40, n, 100000, "H", FALSE,
+                            nouvelles_hypotheses(taux_technique = 0.02, marge_mortalite = mg))
+    data.frame(marge_mort = mg, duree = n, prime_commerciale = r$prime_commerciale)
+  }))
+}))
+```
+
+```{r warning=FALSE}
+graph_mortalite(th, tf)
+```
+
+```{r warning=FALSE}
+graph_bareme(barem_H, barem_F)
+```
+
+```{r warning=FALSE}
+graph_decomposition(ex_tarif)
+```
+
+```{r warning=FALSE}
+graph_provisions(df_prov_ex, 40, 20)
+```
+
+```{r warning=FALSE}
+graph_portefeuille(df_port)
+```
+
+```{r warning=FALSE}
+graph_sensibilite(sensi_taux, sensi_mort)
+```
+
+```{r warning=FALSE}
+df_tarif <- tarifer_portefeuille(df_port, hyp = HYP_BASE)
+write.csv(df_tarif, "output/tarification_portefeuille.csv", row.names = FALSE)
+export_excel(barem_H, barem_F, barem_H_fum, df_tarif, df_prov)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
