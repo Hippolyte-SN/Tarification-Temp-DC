@@ -19,7 +19,7 @@ Implémentation complète en R de la tarification, du provisionnement et de l'an
 
 ## Installation des packages
 
-Depuis le dossier `R/`, lancer une fois :
+Lancer une fois :
 
 ```r
 source("installer_packages.R")
@@ -35,31 +35,18 @@ install.packages(c("ggplot2", "dplyr", "tidyr", "patchwork", "openxlsx"))
 
 ## Lancement
 
-**Depuis RStudio** — décommenter la première ligne de `main.R` et exécuter le fichier :
-
-```r
-setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
-source("main.R")
-```
-
-**Depuis le terminal** (ligne de commande) :
-
-```bash
-cd "E:/Git/Tarification temp DC/R"
-Rscript main_cli.R
-```
-
-> **Important :** le répertoire de travail doit impérativement être le dossier `R/`. Tous les chemins (données, sorties) sont relatifs à ce dossier.
+**Depuis RStudio** — ouvrez `main.Rmd` avec le Project File `Tarification temp DC.Rproj` et exécuter le fichier :
 
 ---
 
 ## Structure du projet
 
 ```
-R/
-├── main.R                      # Point d'entrée interactif (RStudio)
-├── main_cli.R                  # Point d'entrée ligne de commande
+/
+├── Tarification temp DC.Rproj  # Project File
 ├── installer_packages.R        # Installation des dépendances
+├── main.Rmd                    # Point d'entrée principal à exécuter
+├── main.html                   # Sortie html après le Knit
 │
 ├── src/
 │   ├── tables_mortalite.R      # Chargement et accès aux tables TH/TF
